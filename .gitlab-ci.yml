@@ -1,0 +1,29 @@
+image: maven:3-jdk-8
+
+services:
+  - docker:dind
+
+variables:
+  DOCKER_RIVER: overlay
+  MAVEN_CLI_OPTS: "-s .m2/settings.xml --batch-mode"
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+stages:
+  - release
+  - deploy
+
+release:develop:
+  stage: release
+  image: docker:latest
+  script:
+    - docker login -u $CI_REGISTRY_USER  -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build . -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+deploy:develop:
+  stage: deploy
+  image: dtzar/helm-kubectl
+  script:
+    - mkdir -p ~/.kube; echo "$CI_K8S_CONFIG_DEV" > ~/.kube/config
+    - sed -ie 's/{{IMAGE_VERSION}}/'"$CI_COMMIT_SHORT_SHA"'/g' deploy/base/deployment.yaml
+    - kubectl apply -k deploy/dev -n programming
